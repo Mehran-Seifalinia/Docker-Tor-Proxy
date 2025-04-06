@@ -5,10 +5,11 @@ This project is a simple script that allows you to configure Docker to route all
 
 ## Prerequisites
 
-- **Tor** must be installed.
 - **Docker** must be installed.
-- Root (sudo) access is required to modify system configuration files.
+- Root (sudo) access is required to modify system configuration files and install packages.
 - This script is optimized for Debian-based systems (e.g., Ubuntu, Debian).
+- Note: Tor and Torsocks will be automatically installed by the script if not present.
+- Note: This script uses `apt` and `systemctl`, so it may require adjustments for non-Debian-based systems (e.g., Fedora, Arch).
 
 ## Tools Used
 
@@ -25,21 +26,26 @@ Using Tor for Docker connections can be beneficial for several reasons:
 
 ## Features
 
-This script provides the following features:
-- **Install Tor and Torsocks**: Installs and configures Tor and Torsocks to ensure that Docker routes all external network traffic through the Tor network.
-- **Configure Docker Proxy Settings**: Automatically updates Docker's configuration to use the Tor network for all outgoing connections.
-- **Control Docker Proxy Settings**: Manage the Docker Tor proxy setup with simple commands (start, stop, status, restart).
+- **Install Tor and Torsocks**: Automatically installs Tor and Torsocks if they are not already present.
+- **Configure Docker Proxy Settings**: Updates Docker to use Tor for outgoing traffic.
+- **Control Docker Proxy Settings**: Manage the setup with simple commands (start, stop, status, etc.).
+- **Automatic Backup**: Backs up existing Docker proxy settings before applying changes.
 
 ## Installation
 
-To install and configure Docker to use Tor as a proxy, run the following command:
+To configure Docker to use Tor as a proxy, follow these steps:
 
+1. Make the script executable:
 ```bash
 chmod +x docker-tor-proxy.sh
-./docker-tor-proxy.sh install
 ```
 
-This will install **Tor**, configure Docker to route traffic through **Tor**, and start the necessary services.
+2. Run the script to install dependencies and apply proxy settings:
+```bash
+sudo ./docker-tor-proxy.sh start
+```
+
+**Note:** The script will automatically install Tor and Torsocks if they are not already present.
 
 ## Available Commands
 
@@ -103,16 +109,28 @@ Restore the Docker proxy configuration from the backup:
 
 ## How It Works
 
-1. **Install Tor and Torsocks**: The script installs the necessary tools to enable the Tor network on your system.
-2. **Configure Docker**: Docker's systemd service is configured to route all traffic through Tor using the `socks5h://127.0.0.1:9050` proxy.
-3. **Manage Docker's Proxy Settings**: The script provides commands to enable, disable, check the status, and restart the Docker service with the Tor proxy.
+1. **Install Tor and Torsocks**: The script installs Tor and Torsocks if they are not already present on your system.
+2. **Configure Docker**: Updates Docker’s systemd service to route traffic through Tor using `socks5h://127.0.0.1:9050` (default Tor port). Modify the `TOR_PORT` variable in the script to use a different port.
+3. **Manage Proxy Settings**: Provides commands to enable, disable, check, and restart the Docker Tor proxy.
 
 ## Troubleshooting
 
-If you encounter any issues with the setup, ensure that:
-- **Install Tor and Torsocks:** The script installs the necessary tools to enable the Tor network on your system.
-- **Configure Docker:** Docker's systemd service is configured to route all traffic through Tor using the socks5h://127.0.0.1:9050 proxy.
-- **Manage Docker's Proxy Settings:** The script provides commands to enable, disable, check the status, and restart the Docker service with the Tor proxy.
+- **Tor not running**: Start Tor ->
+  ```bash
+  sudo systemctl start tor
+  ```
+- **Installation fails:** Ensure you have an active internet connection and sufficient permissions ->
+  ```bash
+  sudo apt update && sudo apt install -y tor torsocks
+  ```
+- **Docker not restarting:** Restart manually ->
+  ```bash
+  sudo systemctl restart docker
+  ```
+- **Permission denied** TUse sudo ->
+  ```bash
+  sudo ./docker-tor-proxy.sh start
+  ```
 
 ### Common Issues:
 - **Tor is not running**: Ensure that the Tor service is started with the following command:
@@ -127,10 +145,10 @@ If you encounter any issues with the setup, ensure that:
 
 ## Backup and Restore
 
-Before applying changes, it is recommended to back up your Docker configuration. You can restore the previous Docker proxy settings using the `restore` command:
+The script automatically backs up existing Docker proxy settings before changes. Restore them with:
 
 ```bash
-./docker-tor-proxy.sh restore
+sudo ./docker-tor-proxy.sh restore
 ```
 
 ## Security Considerations
