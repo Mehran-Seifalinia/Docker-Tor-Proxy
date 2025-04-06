@@ -37,7 +37,7 @@ To configure Docker to use Tor as a proxy, follow these steps:
 
 1. Make the script executable:
 ```bash
-chmod +x docker-tor-proxy.sh
+sudo chmod +x docker-tor-proxy.sh
 ```
 
 2. Run the script to install dependencies and apply proxy settings:
