@@ -3,8 +3,15 @@ TOR_SERVICE="tor"
 DOCKER_PROXY_CONF="/etc/systemd/system/docker.service.d/http-proxy.conf"
 BACKUP_FILE="/tmp/docker-proxy-backup.conf"
 
+# Check sudo access
+check_sudo() {
+  if ! sudo -n true 2>/dev/null; then
+    log_error "This script requires sudo privileges. Please run with sudo or as root."
+  fi
+}
+
 set -e
-check_sudo  # Check sudo first
+check_sudo  # Check sudo
 
 # Function to install Tor if not installed
 install_tor() {
@@ -60,13 +67,6 @@ check_tor_connection() {
     log_error "Tor connection failed (timeout or network issue)"
   fi
   set -e  # Re-enable set -e
-}
-
-# Check sudo access
-check_sudo() {
-  if ! sudo -n true 2>/dev/null; then
-    log_error "This script requires sudo privileges. Please run with sudo or as root."
-  fi
 }
 
 # Backup Docker proxy configuration
