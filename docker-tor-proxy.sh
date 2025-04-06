@@ -6,10 +6,25 @@ BACKUP_FILE="/tmp/docker-proxy-backup.conf"
 set -e
 check_sudo  # Check sudo first
 
+# Function to install Tor if not installed
+install_tor() {
+  log_info "Installing Tor..."
+  sudo apt update
+  sudo apt install -y tor
+}
+
+# Function to install torsocks if not installed
+install_torsocks() {
+  log_info "Installing torsocks..."
+  sudo apt update
+  sudo apt install -y torsocks
+}
+
 # Check if Tor is installed
 check_tor_installed() {
   if ! command -v tor &> /dev/null; then
-    log_error "Tor is not installed. Please install Tor using: sudo apt install tor"
+    log_info "Tor is not installed. Installing Tor..."
+    install_tor
   fi
 }
 
@@ -30,7 +45,8 @@ check_tor_service() {
 # Check if torsocks is installed
 check_torsocks_installed() {
   if ! command -v torsocks &> /dev/null; then
-    log_error "torsocks is not installed. Please install it using: sudo apt install torsocks"
+    log_info "torsocks is not installed. Installing torsocks..."
+    install_torsocks
   fi
 }
 
