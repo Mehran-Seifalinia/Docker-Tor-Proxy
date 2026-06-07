@@ -1,5 +1,6 @@
 #!/bin/bash
 TOR_SERVICE="tor"
+TOR_PORT=9050
 DOCKER_PROXY_CONF="/etc/systemd/system/docker.service.d/http-proxy.conf"
 BACKUP_FILE="/tmp/docker-proxy-backup.conf"
 
@@ -18,6 +19,8 @@ install_tor() {
   log_info "Installing Tor..."
   sudo apt update
   sudo apt install -y tor
+  log_info "Starting and enabling Tor service..."
+  sudo systemctl enable --now tor
 }
 
 # Function to install torsocks if not installed
@@ -60,13 +63,23 @@ check_torsocks_installed() {
 # Check if the system is connected to the Tor network
 check_tor_connection() {
   check_torsocks_installed
-  set +e  # Disable set -e temporarily
-  if torsocks curl -s --max-time 10 https://check.torproject.org/api/ip | grep -q '"IsTor":true'; then
-    log_success "Tor connection is working"
-  else
-    log_error "Tor connection failed (timeout or network issue)"
-  fi
-  set -e  # Re-enable set -e
+  set +e
+  local max_attempts=6
+  local attempt=0
+  while [ $attempt -lt $max_attempts ]; do
+    if torsocks curl -s --max-time 10 https://check.torproject.org/api/ip | grep -q '"IsTor":true'; then
+      log_success "Tor connection is working"
+      set -e
+      return 0
+    fi
+    attempt=$((attempt+1))
+    if [ $attempt -lt $max_attempts ]; then
+      log_info "Waiting for Tor connection... (attempt $attempt/$max_attempts)"
+      sleep 5
+    fi
+  done
+  log_error "Tor connection failed after $max_attempts attempts"
+  set -e
 }
 
 # Backup Docker proxy configuration
@@ -78,7 +91,7 @@ backup_docker_config() {
       log_error "Failed to backup Docker proxy configuration"
     fi
   else
-    log_error "No Docker proxy configuration found to backup"
+    log_info "No Docker proxy configuration found to backup"
   fi
 }
 
@@ -116,9 +129,9 @@ apply_docker_proxy() {
   # Apply proxy settings
   sudo bash -c "cat > $DOCKER_PROXY_CONF <<EOF
 [Service]
-Environment=\"HTTP_PROXY=socks5h://127.0.0.1:9050\"
-Environment=\"HTTPS_PROXY=socks5h://127.0.0.1:9050\"
-Environment=\"ALL_PROXY=socks5h://127.0.0.1:9050\"
+Environment=\"HTTP_PROXY=socks5h://127.0.0.1:$TOR_PORT\"
+Environment=\"HTTPS_PROXY=socks5h://127.0.0.1:$TOR_PORT\"
+Environment=\"ALL_PROXY=socks5h://127.0.0.1:$TOR_PORT\"
 Environment=\"NO_PROXY=localhost,127.0.0.1,.docker.internal\"
 EOF"
   
@@ -180,7 +193,11 @@ case "$1" in
     apply_docker_proxy
     ;;
   stop)
-    remove_docker_proxy
+    if [ -f $BACKUP_FILE ]; then
+      restore_backup
+    else
+      remove_docker_proxy
+    fi
     ;;
   status)
     docker_proxy_status
