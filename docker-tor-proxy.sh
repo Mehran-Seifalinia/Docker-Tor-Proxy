@@ -2,17 +2,15 @@
 TOR_SERVICE="tor"
 TOR_PORT=9050
 DOCKER_PROXY_CONF="/etc/systemd/system/docker.service.d/http-proxy.conf"
-BACKUP_FILE="/tmp/docker-proxy-backup.conf"
-
-# Check sudo access
-check_sudo() {
-  if ! sudo -n true 2>/dev/null; then
-    log_error "This script requires sudo privileges. Please run with sudo or as root."
-  fi
-}
+BACKUP_FILE="/etc/systemd/system/docker.service.d/.docker-proxy-backup.conf"
 
 set -e
-check_sudo  # Check sudo
+
+# Check root/sudo access
+if [ "$EUID" -ne 0 ]; then
+  echo "❌ ERROR: This script requires sudo privileges. Please run with sudo or as root." >&2
+  exit 1
+fi
 
 # Function to install Tor if not installed
 install_tor() {
@@ -28,6 +26,15 @@ install_torsocks() {
   log_info "Installing torsocks..."
   sudo apt update
   sudo apt install -y torsocks
+}
+
+# Install curl if not present
+install_curl() {
+  if ! command -v curl &> /dev/null; then
+    log_info "Installing curl..."
+    sudo apt update
+    sudo apt install -y curl
+  fi
 }
 
 # Check if Tor is installed
@@ -63,11 +70,12 @@ check_torsocks_installed() {
 # Check if the system is connected to the Tor network
 check_tor_connection() {
   check_torsocks_installed
+  install_curl
   set +e
-  local max_attempts=6
+  local max_attempts=12
   local attempt=0
   while [ $attempt -lt $max_attempts ]; do
-    if torsocks curl -s --max-time 10 https://check.torproject.org/api/ip | grep -q '"IsTor":true'; then
+    if torsocks curl -s --max-time 10 https://check.torproject.org/api/ip 2>/dev/null | grep -q '"IsTor":true'; then
       log_success "Tor connection is working"
       set -e
       return 0
@@ -84,12 +92,14 @@ check_tor_connection() {
 
 # Backup Docker proxy configuration
 backup_docker_config() {
-  if [ -f $DOCKER_PROXY_CONF ]; then
+  if [ -f $DOCKER_PROXY_CONF ] && [ ! -f $BACKUP_FILE ]; then
     if sudo cp $DOCKER_PROXY_CONF $BACKUP_FILE; then
       log_success "Docker proxy configuration backed up"
     else
       log_error "Failed to backup Docker proxy configuration"
     fi
+  elif [ -f $BACKUP_FILE ]; then
+    log_info "Backup already exists, skipping backup to preserve original config"
   else
     log_info "No Docker proxy configuration found to backup"
   fi
@@ -115,6 +125,8 @@ apply_docker_proxy() {
   check_tor_installed
   check_docker_installed
   check_tor_service
+  log_info "Waiting for Tor network connection..."
+  check_tor_connection
   log_info "Applying Docker proxy settings to use Tor..."
 
   # Ensure necessary directory exists
@@ -149,13 +161,18 @@ remove_docker_proxy() {
   else
     log_info "Docker proxy settings not found"
   fi
+  # Also remove backup if it matches the current (Tor) config? Better keep backup for restore.
 }
 
 # Restart Docker service
 restart_docker() {
-  if ! sudo systemctl daemon-reload || ! sudo systemctl restart docker; then
+  if ! sudo systemctl daemon-reload; then
+    log_error "Failed to reload systemd daemon"
+  fi
+  if ! sudo systemctl restart docker; then
     log_error "Failed to restart Docker service"
   fi
+  sleep 2
   if ! sudo systemctl is-active --quiet docker; then
     log_error "Docker service is not active after restart"
   fi
